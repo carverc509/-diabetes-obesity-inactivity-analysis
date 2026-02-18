@@ -16,8 +16,9 @@
 8. [Repository Structure](#repository-structure)
 9. [How to Run](#how-to-run)
 10. [Tools & Libraries](#tools--libraries)
-11. [Limitations](#limitations)
-12. [Next Steps](#next-steps)
+11. [Tableau Dashboard Guide](#tableau-dashboard-guide)
+12. [Limitations](#limitations)
+13. [Next Steps](#next-steps)
 
 ---
 
@@ -271,6 +272,336 @@ pip install pandas numpy matplotlib seaborn scikit-learn statsmodels geopandas f
 | Tableau Public / Desktop | Final interactive dashboard |
 | Jupyter Notebook | Reproducible analytical scripts |
 | Git | Version control |
+
+---
+
+## Tableau Dashboard Guide
+
+> **Run notebooks 01 and 02 first.** The CSV files below do not exist until notebook 02 completes.
+
+---
+
+### Which File to Load Into Tableau
+
+Load **`cdi_overall_wide.csv`** first — it powers most of the dashboard.
+
+| Load Order | File | Used For |
+|---|---|---|
+| 1st (main) | `data/prepared/cdi_overall_wide.csv` | Maps, regression, clustering, time-series |
+| 2nd | `data/prepared/cdi_demographic.csv` | Race/gender bar charts |
+| 3rd (optional) | `data/prepared/cdi_overall_long.csv` | Multi-indicator line charts |
+
+You also need the **U.S. state shapefile** for the choropleth maps:
+- Download from: https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html
+- File: `tl_2020_us_state.shp` — place in `data/shapefiles/`
+
+---
+
+### Stage 1 — Connect Data Sources (3 connections)
+
+**Connection 1: cdi_overall_wide.csv**
+1. Open Tableau → **Connect to Data → Text File** → select `cdi_overall_wide.csv`
+2. Set field types:
+   - `YearStart` → Number (Whole)
+   - `latitude` → Number (Decimal) → right-click → **Geographic Role → Latitude**
+   - `longitude` → Number (Decimal) → right-click → **Geographic Role → Longitude**
+   - `LocationAbbr` → right-click → **Geographic Role → State/Province**
+   - `diabetes_prevalence`, `obesity_prevalence`, `inactivity_prevalence` → Number (Decimal)
+3. Name this connection: **"CDI State-Year Panel"**
+
+**Connection 2: cdi_demographic.csv**
+1. Click **Add** → **Text File** → select `cdi_demographic.csv`
+2. Verify: `Stratification1` = String, `prevalence` = Number (Decimal), `indicator` = String
+3. Name: **"CDI Demographics"**
+
+**Connection 3: Shapefile**
+1. Click **Add** → **Spatial File** → select `tl_2020_us_state.shp`
+2. Join to `cdi_overall_wide` on: `LocationID = STATEFP` (Inner Join)
+3. Name: **"CDI + Shapefile"**
+
+> **Tableau Public users:** Skip the shapefile. Use the built-in filled map by setting `LocationAbbr` Geographic Role to State/Province.
+
+---
+
+### Stage 2 — Create 4 Calculated Fields
+
+Create these in the **CDI State-Year Panel** data source before building any charts.
+
+**Diabetes Risk Category**
+```
+IF [diabetes_prevalence] >= 13 THEN "High Risk (≥13%)"
+ELSEIF [diabetes_prevalence] >= 10 THEN "Moderate Risk (10–13%)"
+ELSE "Lower Risk (<10%)"
+END
+```
+
+**Region**
+```
+IF [LocationAbbr] IN ("CT","ME","MA","NH","RI","VT","NJ","NY","PA") THEN "Northeast"
+ELSEIF [LocationAbbr] IN ("IL","IN","MI","OH","WI","IA","KS","MN","MO","NE","ND","SD") THEN "Midwest"
+ELSEIF [LocationAbbr] IN ("DE","FL","GA","MD","NC","SC","VA","WV","DC","AL","KY","MS","TN","AR","LA","OK","TX") THEN "South"
+ELSE "West"
+END
+```
+
+**Year as Date**
+```
+MAKEDATE([YearStart], 1, 1)
+```
+
+**YoY Change** — Table Calculation on `AVG(diabetes_prevalence)`: Difference → Along Table (Down)
+
+---
+
+### Stage 3 — Build 22 Sheets Across 8 Dashboard Pages
+
+#### Page 1 — Introduction
+Text box with project title, hypothesis, and dataset citation. Embed `visualizations/eda_pairplot.png` as an image object. No Tableau worksheet needed.
+
+---
+
+#### Page 2 — EDA: Scatter Plots
+*(Filter all sheets to `YearStart = 2020`)*
+
+**Sheet 2A — Obesity vs. Diabetes Scatter Plot**
+1. `obesity_prevalence` → Columns
+2. `diabetes_prevalence` → Rows
+3. `LocationAbbr` → Detail, `Region` → Color, `LocationAbbr` → Label (Min/Max only)
+4. Mark type: Circle
+5. Right-click axes → Add Reference Line → Average on both axes
+6. Title: *"Obesity Rate vs. Diabetes Prevalence by State (2020)"*
+
+**Sheet 2B — Inactivity vs. Diabetes Scatter Plot**
+- Same as 2A but swap x-axis to `inactivity_prevalence`
+- Title: *"Physical Inactivity Rate vs. Diabetes Prevalence by State (2020)"*
+
+**Sheet 2C — Correlation Heatmap**
+1. Drag `Measure Names` to Rows and Columns
+2. Filter to: `diabetes_prevalence`, `obesity_prevalence`, `inactivity_prevalence`
+3. `Measure Values` → Color and Text. Mark type: Square
+4. Color palette: Blue-Red Diverging
+5. Title: *"Correlation Matrix: Diabetes, Obesity, Physical Inactivity"*
+
+**Sheet 2D — Pair Plot**
+- Embed `visualizations/eda_pairplot.png` as an Image object in the dashboard
+
+---
+
+#### Page 3 — EDA: Demographics
+*(Use CDI Demographics data source. Filter all sheets to `YearStart = 2020`)*
+
+**Sheet 3A — Diabetes by Race/Ethnicity (Bar Chart)**
+1. Filter: `indicator = 'diabetes_prevalence'`, `StratificationCategory1 = 'Race/Ethnicity'`
+2. `Stratification1` → Rows, `AVG(prevalence)` → Columns
+3. Sort descending. `Stratification1` → Color. Add average reference line.
+4. Title: *"Average Diabetes Prevalence by Race/Ethnicity (2020)"*
+
+**Sheet 3B — All 3 Indicators by Gender (Grouped Bar)**
+1. Filter: `StratificationCategory1 = 'Gender'`
+2. `indicator` → Columns, `AVG(prevalence)` → Rows, `Stratification1` → Color
+3. Mark type: Bar
+4. Title: *"Diabetes, Obesity, and Inactivity Prevalence by Gender (2020)"*
+
+**Sheet 3C — Diabetes by Region (Box Plot)**
+1. `Region` → Columns, `diabetes_prevalence` → Rows
+2. Mark type: Circle → Analytics pane → Box Plot
+3. `LocationAbbr` → Detail. Sort by median descending.
+4. Title: *"Distribution of State Diabetes Prevalence by U.S. Census Region (2020)"*
+
+---
+
+#### Page 4 — Geospatial Maps
+*(Filter all sheets to `YearStart = 2020`)*
+
+**Sheet 4A — Diabetes Choropleth**
+1. Double-click `LocationAbbr` → auto-generates map
+2. `AVG(diabetes_prevalence)` → Color. Palette: Sequential Orange-Red
+3. Add `LocationDesc`, all 3 prevalences → Tooltip
+4. Title: *"Age-Adjusted Diabetes Prevalence by State (2020)"*
+
+**Sheet 4B — Obesity Choropleth**
+- Same as 4A but `AVG(obesity_prevalence)` → Color. Palette: Sequential Blue
+
+**Sheet 4C — Inactivity Choropleth**
+- Same as 4A but `AVG(inactivity_prevalence)` → Color. Palette: Sequential Green
+
+**Sheet 4D — Dual-Axis Risk Overlay**
+1. Start with Sheet 4A (diabetes choropleth)
+2. Drag `longitude` → Columns → right-click → Dual Axis
+3. Second axis Marks card: mark type Circle, `AVG(obesity_prevalence)` → Size, color semi-transparent white
+4. Title: *"Diabetes Prevalence (color) with Obesity Rate (circle size) by State"*
+
+---
+
+#### Page 5 — Regression Analysis
+*(Filter all sheets to `YearStart = 2020`)*
+
+**Sheet 5A — Obesity Regression Trend Line**
+1. Recreate Sheet 2A scatter plot
+2. Analytics pane → drag **Trend Line** → Linear → show confidence bands
+3. Right-click trend line → Describe Trend Line (note R² and p-value)
+4. Add R² and p-value as Annotation → Point on chart
+5. Title: *"Linear Regression: Obesity Predicts Diabetes Prevalence"*
+
+**Sheet 5B — Inactivity Regression Trend Line**
+- Same as 5A but `inactivity_prevalence` on x-axis
+- Title: *"Linear Regression: Physical Inactivity Predicts Diabetes Prevalence"*
+
+**Sheet 5C — Residual Plot**
+- Embed `visualizations/regression_residuals.png` from notebook 04 as image object
+
+**Sheet 5D — Regression Results Table**
+1. Connect `reports/regression_results.csv` as a data source
+2. Text Table showing: `term`, `coefficient`, `std_error`, `p_value`, `95%_CI`
+3. Title: *"OLS Regression Results: Diabetes Prevalence ~ Obesity + Inactivity"*
+
+---
+
+#### Page 6 — Cluster Analysis
+*(After notebook 05: re-export `cdi_overall_wide.csv` with `cluster_label` and `cluster_name` columns added, then refresh the Tableau connection)*
+
+**Sheet 6A — Cluster Scatter Plot**
+1. `obesity_prevalence` → Columns, `diabetes_prevalence` → Rows
+2. `cluster_name` → Color, `inactivity_prevalence` → Size, `LocationAbbr` → Label
+3. Mark type: Circle
+4. Title: *"K-Means Clusters: State Health Risk Profiles"*
+
+**Sheet 6B — Cluster Geographic Map**
+1. Double-click `LocationAbbr` → map
+2. `cluster_name` → Color (Tableau Bold categorical palette)
+3. Title: *"Geographic Distribution of K-Means State Health Clusters"*
+
+**Sheet 6C — Cluster Profile Bar Chart**
+1. `cluster_name` → Rows
+2. Measure Names/Values → show all 3 prevalences as grouped bars, color by indicator
+3. Sort by `AVG(diabetes_prevalence)` descending
+4. Title: *"Mean Indicator Values by State Health Cluster"*
+
+**Sheet 6D — Elbow Plot**
+- Embed `visualizations/cluster_elbow_plot.png` from notebook 05 as image object
+
+---
+
+#### Page 7 — Time-Series Analysis
+
+**Sheet 7A — National Trend Lines (All 3 Indicators)**
+1. `Year (as Date)` → Columns (Year level)
+2. Measure Values → Rows (filter to all 3 prevalences). Measure Names → Color
+3. Mark type: Line. Set inactivity line to dashed style.
+4. Title: *"National Average Prevalence Trends: Diabetes, Obesity, Physical Inactivity (2011–2021)"*
+
+**Sheet 7B — State Diabetes Trends Over Time**
+1. `Year (as Date)` → Columns, `AVG(diabetes_prevalence)` → Rows
+2. `LocationAbbr` → Color. Mark type: Line
+3. Highlight Mississippi (highest) and Colorado (lowest)
+4. Title: *"State Diabetes Prevalence Trends Over Time (2011–2021)"*
+
+**Sheet 7C — Decomposition Components**
+- Embed `visualizations/ts_decomposition.png` from notebook 06 as image object
+
+**Sheet 7D — Year-over-Year Change Bar Chart**
+1. `Year (as Date)` → Columns
+2. Table Calculation on `AVG(diabetes_prevalence)`: Difference → Along Table (Down) → Rows
+3. Mark type: Bar. Color: positive change = red, negative = blue
+4. Title: *"Year-over-Year Change in National Average Diabetes Prevalence"*
+
+---
+
+#### Page 8 — Results Summary
+
+**Sheet 8A — State Rankings Table**
+1. Filter: `YearStart = 2020`
+2. `LocationDesc` → Rows. All 3 prevalences + `cluster_name` → Columns as Text Table
+3. Sort by `diabetes_prevalence` descending. Add red gradient conditional formatting on diabetes column.
+4. Title: *"2020 State Rankings: Diabetes, Obesity, and Physical Inactivity"*
+
+**Sheet 8B — Hypothesis Scorecard**
+Create 4 KPI text tiles in the dashboard layout:
+
+| Hypothesis | Expected Result |
+|---|---|
+| H1: Obesity is strongest predictor | ✓ Confirmed — fill in R² from notebook 04 |
+| H2: Southern states cluster highest | ✓ Confirmed — cluster map shows geographic coherence |
+| H3: Diabetes rising nationally 2011–2021 | ✓ Confirmed — ADF test shows non-stationary upward trend |
+| H4: Disparity stronger in Black adults | ✓ Partially confirmed — see demographic charts |
+
+**Sheet 8C — Limitations (Text Box)**
+```
+• Ecological analysis: state-level correlations do not imply individual-level causation.
+• Missing data: some state-year observations dropped due to suppressed BRFSS values.
+• Self-reported data: BRFSS values may underestimate true prevalence.
+• Unmeasured confounders: food environment, healthcare access, and genetics not modeled.
+• BRFSS methodology change: data restricted to 2011+ for comparability.
+• No county-level analysis: within-state variation is masked.
+```
+
+**Sheet 8D — Next Steps (Text Box)**
+```
+• Integrate county-level data from CDC PLACES for sub-state geographic resolution.
+• Add socioeconomic predictors (poverty index, food desert score) to the regression model.
+• Build a panel model with state fixed effects to control for unobserved state characteristics.
+• Analyze lagged effects: does rising obesity in year t predict rising diabetes in year t+3?
+• Extend clustering to include cardiovascular and COPD indicators for a broader health profile.
+```
+
+---
+
+### Stage 4 — Dashboard Assembly
+
+| Dashboard Tab | Sheets | Size |
+|---|---|---|
+| 1 — Introduction | Text + image | 1200 × 800 |
+| 2 — EDA: Correlations | 2A, 2B, 2C, 2D | 1200 × 900 |
+| 3 — EDA: Demographics | 3A, 3B, 3C | 1200 × 900 |
+| 4 — Geospatial | 4A, 4B, 4C, 4D | 1200 × 900 |
+| 5 — Regression | 5A, 5B, 5C, 5D | 1200 × 900 |
+| 6 — Clustering | 6A, 6B, 6C, 6D | 1200 × 900 |
+| 7 — Time-Series | 7A, 7B, 7C, 7D | 1200 × 900 |
+| 8 — Summary | 8A, 8B, 8C, 8D | 1200 × 900 |
+
+**Global Filters (apply to all pages):**
+- `YearStart` → slider filter
+- `Region` → multi-select checkbox filter
+
+**Navigation:** Dashboard → Objects → Navigation → add forward/back buttons on every page.
+
+**Color Scheme:**
+- Diabetes → Orange-Red gradient
+- Obesity → Blue gradient
+- Inactivity → Green gradient
+- Clusters → Tableau Bold (4 colors)
+- Background → `#FFFFFF`, Font → Tableau Book 12pt body / 18pt titles
+
+---
+
+### Quick Reference: All 22 Charts
+
+| Analysis Step | Chart | Sheet | Hypothesis Supported |
+|---|---|---|---|
+| EDA | Obesity vs. Diabetes scatter | 2A | H1 |
+| EDA | Inactivity vs. Diabetes scatter | 2B | H1 |
+| EDA | Correlation heatmap | 2C | H1 |
+| EDA | Pair plot (image) | 2D | H1 |
+| EDA Demographics | Bar chart by race/ethnicity | 3A | H4 |
+| EDA Demographics | Grouped bar by gender | 3B | H4 |
+| EDA Demographics | Box plot by region | 3C | H2 |
+| Geospatial | Diabetes choropleth | 4A | H2 |
+| Geospatial | Obesity choropleth | 4B | H1 geographic |
+| Geospatial | Inactivity choropleth | 4C | H1 geographic |
+| Geospatial | Dual-axis risk overlay | 4D | H1 + H2 |
+| Regression | Obesity trend line + R² | 5A | H1 |
+| Regression | Inactivity trend line + R² | 5B | H1 |
+| Regression | Residual plot (image) | 5C | Model validity |
+| Regression | Results table | 5D | H1 |
+| Clustering | Cluster scatter plot | 6A | H2 |
+| Clustering | Cluster geographic map | 6B | H2 |
+| Clustering | Cluster profile bars | 6C | H2 |
+| Clustering | Elbow plot (image) | 6D | K selection |
+| Time-Series | National trend lines | 7A | H3 |
+| Time-Series | State trend lines | 7B | H3 |
+| Time-Series | YoY change bars | 7D | H3 |
+| Summary | State rankings table | 8A | All |
+| Summary | Hypothesis scorecard | 8B | All |
 
 ---
 

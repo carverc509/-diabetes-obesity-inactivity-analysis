@@ -1,0 +1,42 @@
+# ── Large raw data (too big for GitHub) ──────────────────────────────────────
+data/original/
+*.csv
+
+# Keep prepared (cleaned) data — comment this line out if files are <100 MB
+# data/prepared/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── OS / IDE ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ── Tableau workbooks (keep only the guide, not binary .twb/.twbx) ───────────
+*.twb
+*.twbx
+*.tds
+*.tdsx
+
+# ── Logs & temp ──────────────────────────────────────────────────────────────
+*.log
+*.tmp

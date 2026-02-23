@@ -1,4 +1,4 @@
-# 🩺 # The Diabetes-Obesity-Inactivity Triangle
+# 🩺 The Diabetes-Obesity-Inactivity Triangle
 ### Predicting U.S. State-Level Diabetes Prevalence from Lifestyle Risk Factors
 
 > **CareerFoundry Data Immersion — Achievement 6: Advanced Analytics & Dashboard Design**
